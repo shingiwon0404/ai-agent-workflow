@@ -35,6 +35,17 @@ jobs:
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: await require('./automation/prepare.cjs')({github, context, core});
+      - name: Check required secrets
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          OPENAI_CONFIGURED: ${{ secrets.OPENAI_API_KEY != '' }}
+          GITHUB_TOKEN_CONFIGURED: ${{ secrets.GH_AUTOMATION_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ "$OPENAI_CONFIGURED" != 'true' ] || [ "$GITHUB_TOKEN_CONFIGURED" != 'true' ]; then
+            echo 'Configure OPENAI_API_KEY and GH_AUTOMATION_TOKEN in Actions secrets before running the agent.' >&2
+            exit 1
+          fi
       - name: Restore issue branch
         if: steps.prepare.outputs.ready == 'true'
         env:
@@ -98,24 +109,16 @@ jobs:
           script: |
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             await require('./automation/comments.cjs').status(github, context, Number(process.env.ISSUE_NUMBER), `Codex produced no changes compared with the default branch. Please clarify the request or review the [run](${url}).`);
-      - name: Create installation token
-        id: app
-        if: steps.commit.outputs.changed == 'true'
-        uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42 # v2.1.4
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
       - name: Push branch
         id: push
         if: steps.commit.outputs.changed == 'true'
         env:
-          APP_TOKEN: ${{ steps.app.outputs.token }}
+          GH_AUTOMATION_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
           BRANCH: ${{ steps.prepare.outputs.branch }}
         run: |
           set -euo pipefail
-          auth=$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)
+          auth=$(printf 'x-access-token:%s' "$GH_AUTOMATION_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
           git -c "http.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$BRANCH"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo 'ready=true' >> "$GITHUB_OUTPUT"
@@ -190,13 +193,6 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - id: app
-        uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42 # v2.1.4
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
       - id: pr
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         env:
@@ -205,7 +201,7 @@ jobs:
           UNIT_RESULT: ${{ needs.unit.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
         with:
-          github-token: ${{ steps.app.outputs.token }}
+          github-token: ${{ secrets.GH_AUTOMATION_TOKEN }}
           script: await require('./automation/publish.cjs')({github, context, core});
       - name: Report outcome
         if: always()

@@ -21,7 +21,7 @@ npm run test:e2e
 
 ## 자동화 사용
 
-GitHub App, OpenAI 인증과 브랜치 보호를 [운영 안내](docs/OPERATIONS.md)에 따라 먼저 설정한다. 쓰기 권한이 있는 팀원이 feature 이슈에 **Goal**과 **Acceptance criteria**를 작성하면 자동화가 시작된다. 정보가 부족하면 이슈에 보완할 내용을 남긴다. 본문을 수정하면 최신 내용으로 다시 실행된다.
+저장소 전용 GitHub 토큰, OpenAI 인증과 브랜치 보호를 [운영 안내](docs/OPERATIONS.md)에 따라 먼저 설정한다. 쓰기 권한이 있는 팀원이 feature 이슈에 **Goal**과 **Acceptance criteria**를 작성하면 자동화가 시작된다. 정보가 부족하면 이슈에 보완할 내용을 남긴다. 본문을 수정하면 최신 내용으로 다시 실행된다.
 
 Codex는 `ai/issue-N` 브랜치에서 관련 `docs/` 문서와 테스트, 구현을 변경한다. 별도 잡의 테스트 결과를 PR에 기록하고 실패하면 draft로 남긴다. 다시 실행할 때 기존 브랜치와 PR을 사용한다. `.github/`와 `automation/`의 수정은 사람이 별도 PR로 처리한다. PR 생성 후 별도 CI가 실행되며, 두 검사와 사람 리뷰를 거친 후 병합한다.
 
