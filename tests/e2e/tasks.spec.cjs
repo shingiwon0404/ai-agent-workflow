@@ -23,3 +23,38 @@ test('rejects a blank task and displays user text as text', async ({ page }) => 
   await expect(page.getByText('<img src=x>')).toBeVisible();
   await expect(page.locator('#task-list img')).toHaveCount(0);
 });
+
+test('toggles a legacy task with the keyboard and persists both states', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem('small-steps.tasks.v1', JSON.stringify([
+      { id: 'legacy', title: '이전 할 일' },
+    ]));
+  });
+  await page.reload();
+
+  const checkbox = page.getByRole('checkbox', { name: '이전 할 일' });
+  const title = page.getByText('이전 할 일', { exact: true });
+  await expect(checkbox).not.toBeChecked();
+
+  await page.getByRole('button', { name: /추가/ }).focus();
+  await page.keyboard.press('Tab');
+  await expect(checkbox).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(checkbox).toBeFocused();
+  await expect(checkbox).toBeChecked();
+  await expect(title).toHaveCSS('text-decoration-line', 'line-through');
+  await page.reload();
+  await expect(checkbox).toBeChecked();
+
+  await checkbox.press('Space');
+  await expect(title).toHaveCSS('text-decoration-line', 'none');
+  await page.reload();
+  await expect(checkbox).not.toBeChecked();
+
+  await checkbox.check();
+  await page.getByRole('button', { name: '이전 할 일 삭제' }).click();
+  await page.reload();
+  await expect(checkbox).toHaveCount(0);
+  await expect(page.getByText('아직 적어둔 일이 없어요.')).toBeVisible();
+});

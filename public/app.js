@@ -14,13 +14,12 @@ try {
   message.textContent = '브라우저 저장 공간을 사용할 수 없어 새로고침하면 목록이 사라질 수 있어요.';
 }
 
-function saveAndRender() {
+function saveTasks() {
   try {
     localStorage.setItem(storageKey, JSON.stringify(tasks));
   } catch {
     message.textContent = '목록을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.';
   }
-  render();
 }
 
 function render() {
@@ -28,9 +27,17 @@ function render() {
   for (const task of tasks) {
     const item = document.createElement('li');
     item.className = 'task';
-    const dot = document.createElement('span');
-    dot.className = 'task-dot';
-    dot.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('label');
+    label.className = 'task-label';
+    const checkbox = document.createElement('input');
+    checkbox.className = 'task-checkbox';
+    checkbox.type = 'checkbox';
+    checkbox.checked = task.completed;
+    checkbox.addEventListener('change', () => {
+      tasks = TaskLogic.toggleTask(tasks, task.id);
+      message.textContent = '';
+      saveTasks();
+    });
     const title = document.createElement('span');
     title.className = 'task-title';
     title.textContent = task.title;
@@ -42,9 +49,11 @@ function render() {
     remove.addEventListener('click', () => {
       tasks = TaskLogic.removeTask(tasks, task.id);
       message.textContent = '';
-      saveAndRender();
+      saveTasks();
+      render();
     });
-    item.append(dot, title, remove);
+    label.append(checkbox, title);
+    item.append(label, remove);
     list.append(item);
   }
   count.textContent = `${tasks.length}개`;
@@ -57,7 +66,8 @@ form.addEventListener('submit', (event) => {
     tasks = TaskLogic.addTask(tasks, input.value, crypto.randomUUID());
     input.value = '';
     message.textContent = '';
-    saveAndRender();
+    saveTasks();
+    render();
     input.focus();
   } catch (error) {
     message.textContent = error.message;
