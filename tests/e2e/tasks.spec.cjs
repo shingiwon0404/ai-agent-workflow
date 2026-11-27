@@ -5,10 +5,10 @@ test('adds, persists and removes a task', async ({ page }) => {
   await expect(page.getByText('아직 적어둔 일이 없어요.')).toBeVisible();
   await page.getByLabel('새 할 일').fill('프로젝트 정리하기');
   await page.getByRole('button', { name: /추가/ }).click();
-  await expect(page.getByText('프로젝트 정리하기')).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: '프로젝트 정리하기' })).not.toBeChecked();
   await expect(page.locator('#task-count')).toHaveText('1개');
   await page.reload();
-  await expect(page.getByText('프로젝트 정리하기')).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: '프로젝트 정리하기' })).not.toBeChecked();
   await page.getByRole('button', { name: '프로젝트 정리하기 삭제' }).click();
   await expect(page.getByText('아직 적어둔 일이 없어요.')).toBeVisible();
 });
@@ -40,6 +40,8 @@ test('toggles a legacy task with the keyboard and persists both states', async (
   await page.getByRole('button', { name: /추가/ }).focus();
   await page.keyboard.press('Tab');
   await expect(checkbox).toBeFocused();
+  await expect(checkbox).toHaveCSS('outline-width', '2px');
+  await expect(checkbox).toHaveCSS('outline-style', 'solid');
   await page.keyboard.press('Space');
   await expect(checkbox).toBeFocused();
   await expect(checkbox).toBeChecked();

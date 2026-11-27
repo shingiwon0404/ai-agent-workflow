@@ -35,3 +35,15 @@ test('toggles only the selected task and preserves both states in storage', () =
   expect(toggleTask(completed, 'a')).toEqual(original);
   expect(removeTask(completed, 'a')).toEqual([original[1]]);
 });
+
+test('only a stored boolean true marks a task complete', () => {
+  const tasks = [undefined, false, true, 'true', 1].map((completed, index) => ({
+    id: String(index),
+    title: '할 일',
+    completed,
+  }));
+
+  expect(readTasks(JSON.stringify(tasks))).toEqual(
+    tasks.map((task, index) => ({ ...task, completed: index === 2 })),
+  );
+});

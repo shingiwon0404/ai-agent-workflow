@@ -29,6 +29,7 @@ h2 { font-size: 21px; margin: 9px 0 0; letter-spacing: -.05em; }
 .task { display: flex; align-items: center; gap: 13px; min-height: 62px; border-bottom: 1px solid #eff2ec; }
 .task-label { display: flex; align-items: center; gap: 13px; flex: 1; min-width: 0; cursor: pointer; }
 .task-checkbox { width: 18px; height: 18px; margin: 0; flex: 0 0 auto; accent-color: #2b704f; cursor: pointer; }
+.task-checkbox:focus-visible { outline: 2px solid #2b704f; outline-offset: 3px; }
 .task-checkbox:checked + .task-title { text-decoration: line-through; }
 .task-title { flex: 1; overflow-wrap: anywhere; font-size: 15px; }
 .delete-button { border: 0; background: transparent; color: #8d9a90; padding: 10px 4px; font-size: 12px; }
