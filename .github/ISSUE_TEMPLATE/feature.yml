@@ -1,0 +1,26 @@
+name: Feature request for the AI agent
+description: Describe a bounded change for the issue-driven workflow.
+title: "[Feature] "
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should change and why?
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+      description: List observable outcomes as Markdown bullets.
+      placeholder: |
+        - The user can ...
+        - The result remains after a reload.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Optional constraints and examples.

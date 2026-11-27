@@ -1,0 +1,288 @@
+name: Issue agent
+on:
+  issues:
+    types: [opened, edited, reopened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Open issue number to retry
+        required: true
+        type: string
+concurrency:
+  group: issue-agent-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+jobs:
+  implement:
+    name: Implement issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      issue: ${{ steps.prepare.outputs.issue }}
+      branch: ${{ steps.prepare.outputs.branch }}
+      ready: ${{ steps.bundle.outputs.ready }}
+      sha: ${{ steps.bundle.outputs.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: prepare
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: await require('./automation/prepare.cjs')({github, context, core});
+      - name: Check required secrets
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          OPENAI_CONFIGURED: ${{ secrets.OPENAI_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          if [ "$OPENAI_CONFIGURED" != 'true' ]; then
+            echo 'Configure OPENAI_API_KEY in Actions secrets before running the agent.' >&2
+            exit 1
+          fi
+      - name: Restore issue branch
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          BRANCH: ${{ steps.prepare.outputs.branch }}
+          BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git config user.name 'ai-agent-workflow[bot]'
+          git config user.email 'ai-agent-workflow[bot]@users.noreply.github.com'
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+            git merge --no-edit "origin/$BASE"
+          else
+            git checkout -b "$BRANCH"
+          fi
+      - name: Run Codex
+        if: steps.prepare.outputs.ready == 'true'
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
+        with:
+          prompt-file: ${{ runner.temp }}/issue-prompt.txt
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ':workspace'
+      - name: Check and commit changes
+        if: steps.prepare.outputs.ready == 'true'
+        id: commit
+        env:
+          BASE: ${{ github.event.repository.default_branch }}
+          ISSUE_NUMBER: ${{ steps.prepare.outputs.issue }}
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --name-only -z > "$RUNNER_TEMP/staged-paths"
+          git diff --name-only -z "origin/$BASE...HEAD" > "$RUNNER_TEMP/existing-paths"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          paths = []
+          for file in ('staged-paths', 'existing-paths'):
+              paths += [p.decode('utf-8', 'surrogateescape') for p in (Path(os.environ['RUNNER_TEMP']) / file).read_bytes().split(b'\0') if p]
+          forbidden = [p for p in paths if p.startswith(('.github/', 'automation/'))]
+          if forbidden:
+              raise SystemExit('Workflow or automation files require a separate human PR: ' + ', '.join(forbidden))
+          if paths and not any(p.startswith('docs/') for p in paths):
+              raise SystemExit('The related design documents in docs/ must be updated first.')
+          PY
+          if ! git diff --cached --quiet; then
+            git commit -m "Implement issue #$ISSUE_NUMBER"
+          fi
+          if git diff --quiet "origin/$BASE" HEAD; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: No changes to propose
+        if: steps.prepare.outputs.ready == 'true' && steps.commit.outputs.changed == 'false'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          ISSUE_NUMBER: ${{ steps.prepare.outputs.issue }}
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await require('./automation/comments.cjs').status(github, context, Number(process.env.ISSUE_NUMBER), `Codex produced no changes compared with the default branch. Please clarify the request or review the [run](${url}).`);
+      - name: Package branch for a separate publishing job
+        id: bundle
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          BRANCH: ${{ steps.prepare.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git bundle create "$RUNNER_TEMP/issue.bundle" "refs/heads/$BRANCH"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+      - name: Upload branch bundle
+        if: steps.bundle.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: issue-branch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/issue.bundle
+          if-no-files-found: error
+          retention-days: 1
+      - name: Report implementation failure
+        if: failure() && steps.prepare.outputs.issue != ''
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          ISSUE_NUMBER: ${{ steps.prepare.outputs.issue }}
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const issue_number = Number(process.env.ISSUE_NUMBER);
+            const marker = '<!-- ai-agent-workflow-status -->';
+            const body = `${marker}\nImplementation failed before a branch could be published. Check the [run logs](${url}), correct the cause, and retry with workflow_dispatch.`;
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 });
+            const prior = comments.find(c => c.user?.login === 'github-actions[bot]' && c.body?.includes(marker));
+            if (prior) await github.rest.issues.updateComment({ ...context.repo, comment_id: prior.id, body });
+            else await github.rest.issues.createComment({ ...context.repo, issue_number, body });
+
+  push:
+    name: Publish issue branch
+    needs: implement
+    if: needs.implement.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: issue-branch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/issue-branch
+      - name: Verify and push the tested commit
+        env:
+          BRANCH: ${{ needs.implement.outputs.branch }}
+          EXPECTED_SHA: ${{ needs.implement.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/issue-branch/issue.bundle"
+          git bundle verify "$bundle"
+          git fetch "$bundle" "refs/heads/$BRANCH:refs/heads/$BRANCH"
+          test "$(git rev-parse "refs/heads/$BRANCH")" = "$EXPECTED_SHA"
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -c "http.extraheader=AUTHORIZATION: basic $auth" push origin "refs/heads/$BRANCH:refs/heads/$BRANCH"
+      - name: Report branch publishing failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          ISSUE_NUMBER: ${{ needs.implement.outputs.issue }}
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await require('./automation/comments.cjs').status(github, context, Number(process.env.ISSUE_NUMBER), `Branch publishing failed. Check the [run logs](${url}) and retry.`);
+
+  unit:
+    name: Agent unit tests
+    needs: [implement, push]
+    if: needs.implement.outputs.ready == 'true' && needs.push.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.implement.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  e2e:
+    name: Agent E2E tests
+    needs: [implement, push]
+    if: needs.implement.outputs.ready == 'true' && needs.push.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.implement.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: agent-playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  publish:
+    name: Create or update pull request
+    needs: [implement, push, unit, e2e]
+    if: always() && needs.implement.outputs.ready == 'true' && needs.push.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Verify the branch still points at the tested commit
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          BRANCH: ${{ needs.implement.outputs.branch }}
+          EXPECTED_SHA: ${{ needs.implement.outputs.sha }}
+        with:
+          script: |
+            const ref = await github.rest.git.getRef({ ...context.repo, ref: `heads/${process.env.BRANCH}` });
+            if (ref.data.object.sha !== process.env.EXPECTED_SHA) core.setFailed('The branch changed after testing. Retry the issue.');
+      - id: pr
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          ISSUE_NUMBER: ${{ needs.implement.outputs.issue }}
+          BRANCH: ${{ needs.implement.outputs.branch }}
+          UNIT_RESULT: ${{ needs.unit.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+        with:
+          script: await require('./automation/publish.cjs')({github, context, core});
+      - name: Dispatch independent PR checks
+        id: dispatch
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          BRANCH: ${{ needs.implement.outputs.branch }}
+          EXPECTED_SHA: ${{ needs.implement.outputs.sha }}
+        with:
+          script: |
+            const ref = await github.rest.git.getRef({ ...context.repo, ref: `heads/${process.env.BRANCH}` });
+            if (ref.data.object.sha !== process.env.EXPECTED_SHA) throw new Error('The branch changed after testing. Retry the issue.');
+            await github.rest.actions.createWorkflowDispatch({ ...context.repo, workflow_id: 'ci.yml', ref: process.env.BRANCH });
+      - name: Report outcome
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          ISSUE_NUMBER: ${{ needs.implement.outputs.issue }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          UNIT_RESULT: ${{ needs.unit.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          DISPATCH_RESULT: ${{ steps.dispatch.outcome }}
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const result = process.env.PR_URL ? `Pull request: ${process.env.PR_URL}` : 'Pull request creation failed; check the run logs and retry.';
+            await require('./automation/comments.cjs').status(github, context, Number(process.env.ISSUE_NUMBER), `${result}\n\nUnit: ${process.env.UNIT_RESULT}; E2E: ${process.env.E2E_RESULT}; CI dispatch: ${process.env.DISPATCH_RESULT}. [Run](${url})`);

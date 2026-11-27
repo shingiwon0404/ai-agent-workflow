@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>한 걸음 · 할 일</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/tasks.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <a class="brand" href="/" aria-label="한 걸음 홈"><span class="brand-mark">↗</span> 한 걸음</a>
+      <span class="header-note">오늘을 가볍게</span>
+    </header>
+    <section class="intro" aria-labelledby="page-title">
+      <span class="eyebrow">A LITTLE PROGRESS, EVERY DAY</span>
+      <h1 id="page-title">작은 일부터,<br><em>한 걸음씩.</em></h1>
+      <p>해야 할 일을 적어두고, 오늘의 여유를 만들어 보세요.</p>
+    </section>
+    <section class="board" aria-labelledby="list-heading">
+      <div class="board-heading"><div><span class="section-label">YOUR LIST</span><h2 id="list-heading">나의 할 일 <span id="task-count" class="count">0개</span></h2></div><span class="sparkle" aria-hidden="true">✳</span></div>
+      <form id="task-form" class="task-form" novalidate>
+        <label for="task-title" class="visually-hidden">새 할 일</label>
+        <input id="task-title" name="title" maxlength="100" placeholder="새로운 할 일을 입력해 주세요" autocomplete="off">
+        <button type="submit">추가 <span aria-hidden="true">↗</span></button>
+      </form>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+      <ul id="task-list" class="task-list" aria-label="할 일 목록"></ul>
+      <div id="empty-state" class="empty"><span aria-hidden="true">✺</span><strong>아직 적어둔 일이 없어요.</strong><p>가장 먼저 떠오르는 일부터 적어볼까요?</p></div>
+    </section>
+    <footer><span>SMALL STEPS, GOOD DAYS.</span><span>나만의 속도로 천천히</span></footer>
+  </main>
+</body>
+</html>
