@@ -36,6 +36,12 @@ test('incomplete requirements get a request for information and never start the 
   const github = prepareGithub('### Goal\nshort');
   await prepare({ github, context, core });
   expect(status).toHaveBeenCalledWith(github, context, 3, expect.stringContaining('More information'));
+  const [, , , message] = status.mock.calls[0];
+  expect(message).toContain('a specific Goal');
+  expect(message).toContain('at least one specific Acceptance criteria bullet');
+  expect(message).toContain('Edit the issue body using the feature template headings; editing it will retry the workflow.');
+  expect(message).toContain('[Run](https://github.com/team/example/actions/runs/100)');
+  expect(github.paginate).not.toHaveBeenCalled();
   expect(core.setOutput).not.toHaveBeenCalledWith('ready', 'true');
 });
 
