@@ -1,0 +1,33 @@
+name: Create bootstrap bot pull request
+on:
+  pull_request:
+    types: [synchronize]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  create:
+    if: github.repository == 'shingiwon0404/ai-agent-workflow' && github.event.pull_request.number == 2 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'bootstrap/issue-1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const branch = 'bootstrap/ai-issue-1';
+            const existing = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', head: `${owner}:${branch}`, base: 'main', per_page: 100 });
+            if (existing.length) {
+              core.notice(`Existing bot PR: ${existing[0].html_url}`);
+              return;
+            }
+            const body = [
+              'Closes #1',
+              '',
+              '할 일 앱과 이슈 기반 Codex 워크플로를 초기 구성합니다. GitHub Actions 봇이 기본 토큰으로 PR을 생성하므로 별도의 GitHub App이나 개인 토큰이 필요하지 않습니다.',
+              '',
+              '로컬에서 단위 테스트, 브라우저 테스트와 워크플로 문법을 확인했습니다. 병합 전에 설계, 코드와 필수 검사를 검토해 주세요.',
+              '',
+              '병합 후 OpenAI 비밀값을 설정하고 시연 이슈 #3을 실행합니다.',
+            ].join('\n');
+            const pr = await github.rest.pulls.create({ owner, repo, title: '할 일 앱과 AI 에이전트 워크플로 초기 구성', body, head: branch, base: 'main' });
+            core.notice(`Created bot PR: ${pr.data.html_url}`);
