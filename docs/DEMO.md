@@ -4,7 +4,7 @@
 
 | 항목 | 결과 |
 | --- | --- |
-| 초기 구성 이슈 / PR | [이슈 #1](https://github.com/shingiwon0404/ai-agent-workflow/issues/1) / 봇 PR 준비 중. [기존 PR #2](https://github.com/shingiwon0404/ai-agent-workflow/pull/2) 참조 |
+| 초기 구성 이슈 / PR | [이슈 #1](https://github.com/shingiwon0404/ai-agent-workflow/issues/1) / [봇 PR #4](https://github.com/shingiwon0404/ai-agent-workflow/pull/4), 리뷰 대기 |
 | 완료 표시 이슈 / PR | [이슈 #3](https://github.com/shingiwon0404/ai-agent-workflow/issues/3) / 자동화 실행 대기 |
 | 이슈 생성 → PR 생성 시간 | 미측정 |
 | Jest / Playwright 결과 및 실행 링크 | 로컬 Jest 12개, Playwright 2개 통과. [초기 PR GitHub CI](https://github.com/shingiwon0404/ai-agent-workflow/actions/runs/45942012397)의 두 잡 통과 |
