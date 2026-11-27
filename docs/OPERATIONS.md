@@ -3,9 +3,9 @@
 ## 최초 설정
 
 1. 이 프로젝트를 공개 저장소의 기본 브랜치 `main`에 올리고 Actions와 Issues를 활성화한다. 최초 구성은 자동화가 아직 없으므로 사람이 부트스트랩 이슈와 최초 커밋을 연결한다.
-2. GitHub의 Settings → Developer settings → Personal access tokens → Fine-grained tokens에서 토큰을 만든다. Resource owner는 이 저장소 소유자, repository access는 `ai-agent-workflow`만 선택한다. 저장소 권한은 **Contents: read and write**, **Pull requests: read and write**, **Issues: read**, **Metadata: read**다. 만료일을 정하고 토큰을 안전하게 보관한다. 토큰을 발급한 계정은 이 저장소에 쓰기 권한이 있어야 한다.
-3. 저장소의 Settings → Secrets and variables → Actions에 토큰을 `GH_AUTOMATION_TOKEN`으로, OpenAI 인증값을 `OPENAI_API_KEY`로 등록한다. 값은 파일, 이슈 또는 채팅에 기록하지 않는다. OpenAI API 사용은 비용이 발생할 수 있다.
-4. Settings → Actions → General에서 Actions를 허용한다. PR은 위 개인 토큰으로 생성하므로 `pull_request` CI가 자동 실행된다. 기본 `GITHUB_TOKEN`으로 생성한 PR은 GitHub의 이벤트 제한 때문에 검사 실행에 별도 승인이 필요할 수 있다.
+2. 저장소 Settings → Secrets and variables → Actions에 OpenAI 인증값을 `OPENAI_API_KEY`로 등록한다. 값은 파일, 이슈 또는 채팅에 기록하지 않는다. OpenAI API 사용은 비용이 발생할 수 있다. 별도의 GitHub App이나 개인 GitHub 토큰은 필요하지 않다.
+3. Settings → Actions → General에서 Actions와 **Allow GitHub Actions to create and approve pull requests** 설정을 켠다. GitHub는 생성과 승인 허용을 하나의 설정으로 제공하지만 이 워크플로우는 PR을 승인하지 않는다. 기본 워크플로 권한은 읽기로 유지하고 필요한 잡에만 쓰기 권한을 부여한다.
+4. GitHub Actions 봇이 브랜치와 PR을 만들고 `workflow_dispatch`로 별도 CI를 실행한다. 봇이 유발한 `pull_request` 검사에는 GitHub가 별도 실행 승인을 요구할 수 있으므로 PR의 검사 상태와 승인 안내를 확인한다.
 5. `main`의 branch protection 또는 이에 상응하는 ruleset에서 PR을 필수로 하고, 승인 리뷰 1개 이상, `Unit tests`와 `E2E tests` 통과, 최신 기준 브랜치 확인을 요구한다. 관리자 우회도 제한한다. 규칙은 실제 검사 이름과 함께 저장소 설정에서 확인한다.
 
 ## 실행과 재시도
@@ -14,10 +14,10 @@
 - feature 템플릿의 `Goal`에는 10자 이상의 구체적인 목표를, `Acceptance criteria`에는 10자 이상의 검증 가능한 Markdown 목록 항목을 적는다(공백 제외). 이 검사는 형식 검사이므로 요구사항의 완전성을 사람이 검토해야 한다.
 - 열린 이슈의 생성·수정·재열기에서 현재 본문을 다시 읽는다. 이슈별 동시 실행을 직렬화한다. GitHub Actions는 대기 중인 중간 실행을 최신 실행으로 대체할 수 있으므로 최신 본문이 기준이다.
 - Actions → Issue agent → Run workflow에서 이슈 번호를 지정해 재시도할 수 있다. 실패 후 기존 `ai/issue-N` 브랜치를 가져와 최신 기본 브랜치를 병합하고 기존 PR을 갱신한다. 이미 병합된 PR의 추가 작업은 새 이슈로 요청한다.
-- 시연용 이슈 #3은 워크플로우가 main에 들어가기 전에 생성되었으므로 부트스트랩 PR 병합과 토큰·비밀값 설정 후 번호 `3`으로 수동 실행한다.
+- 시연용 이슈 #3은 워크플로우가 main에 들어가기 전에 생성되었으므로 부트스트랩 PR 병합과 비밀값 설정 후 번호 `3`으로 수동 실행한다.
 - 이슈 상태 댓글과 PR의 Actions 링크에서 실행 및 테스트 결과를 확인한다. 테스트 실패는 draft PR, 변경이 없는 경우 이슈 댓글로 보고한다. PR 생성 후 `CI` 검사까지 별도로 확인한다.
 - 최초 설정, 토큰 권한, 정책, Actions 정의와 `automation/`은 사람의 별도 PR로 변경한다. 비밀값을 Codex 프롬프트 또는 실행 로그에 넣지 않는다.
-- PR 작성자는 개인 토큰을 발급한 GitHub 계정이다. GitHub는 작성자의 본인 승인을 허용하지 않으므로 다른 쓰기 권한자의 리뷰가 필요하다. 토큰이 만료되거나 권한이 변경되면 비밀값을 갱신하고 재실행한다.
+- PR 작성자는 `github-actions[bot]`이며, 저장소 쓰기 권한이 있는 사람이 리뷰하고 승인한다. 봇이 대신 승인하거나 병합하지 않는다.
 
 ## 확인 시나리오
 
@@ -29,4 +29,4 @@
 
 ## 신뢰 경계
 
-쓰기 권한이 있는 이슈 작성자는 Codex가 코드와 테스트를 실행하게 할 수 있다. GitHub 개인 토큰은 Codex 실행 이후의 브랜치 푸시와 PR 생성 단계에만 전달하며 검증 잡은 비밀값 없이 별도 러너에서 실행한다. 이슈 텍스트는 요구사항 데이터로 취급하고 설정 파일 변경은 자동 PR에서 거부한다. 이 장치는 팀원의 코드 리뷰나 GitHub 조직 정책을 대체하지 않는다.
+쓰기 권한이 있는 이슈 작성자는 Codex가 코드와 테스트를 실행하게 할 수 있다. Codex는 읽기 권한의 잡에서 실행하고 브랜치 게시와 PR 생성은 필요한 권한만 가진 별도 잡에서 수행한다. 검증 잡은 비밀값 없이 별도 러너에서 실행한다. 이슈 텍스트는 요구사항 데이터로 취급하고 설정 파일 변경은 자동 PR에서 거부한다. 이 장치는 팀원의 코드 리뷰나 GitHub 조직 정책을 대체하지 않는다.

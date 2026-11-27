@@ -14,6 +14,7 @@ module.exports = async ({ github, context, core }) => {
     `- Unit tests: **${unit}**`,
     `- E2E tests: **${e2e}**`,
     `- [Workflow run and test logs](${runUrl})`,
+    `- [Independent CI runs](${context.serverUrl}/${owner}/${repo}/actions/workflows/ci.yml)`,
     '',
     passed ? 'Please review the design, implementation and tests before merging.' : 'This PR is a draft because at least one test job did not pass.',
   ].join('\n');
